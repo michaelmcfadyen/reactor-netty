@@ -39,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 public interface ConnectionProvider extends Disposable {
 
 	int MAX_CONNECTIONS_ELASTIC = -1;
+	int MAX_PENDING_ACQUIRE = -1;
 	int ACQUIRE_TIMEOUT_NEVER_WAIT = 0;
 
 	/**
@@ -259,10 +260,9 @@ public interface ConnectionProvider extends Disposable {
 	 */
 	final class Builder {
 		String   name;
-		int      maxConnections =
-				ConnectionProvider.DEFAULT_POOL_MAX_CONNECTIONS;
-		Duration acquireTimeout =
-				Duration.ofMillis(ConnectionProvider.DEFAULT_POOL_ACQUIRE_TIMEOUT);
+		int      maxConnections    = DEFAULT_POOL_MAX_CONNECTIONS;
+		int      maxPendingAcquire = MAX_PENDING_ACQUIRE;
+		Duration acquireTimeout    = Duration.ofMillis(DEFAULT_POOL_ACQUIRE_TIMEOUT);
 		Duration maxIdleTime;
 		Duration maxLifeTime;
 
@@ -308,8 +308,9 @@ public interface ConnectionProvider extends Disposable {
 		/**
 		 * Set the options to use for configuring {@link ConnectionProvider} maximum connections.
 		 * Default to DEFAULT_POOL_MAX_CONNECTIONS.
-		 * When invoked with MAX_CONNECTIONS_ELASTIC an elastic ConnectionProvider will be created
-		 * and acquireTimeout will be set automatically to ACQUIRE_TIMEOUT_NEVER_WAIT.
+		 * When invoked with MAX_CONNECTIONS_ELASTIC an elastic ConnectionProvider will be created.
+		 * acquireTimeout will be set automatically to ACQUIRE_TIMEOUT_NEVER_WAIT and maxPendingAcquire
+		 * to MAX_PENDING_ACQUIRE.
 		 *
 		 * @param maxConnections the maximum number of connections before start pending
 		 * @return {@literal this}
@@ -322,7 +323,27 @@ public interface ConnectionProvider extends Disposable {
 			this.maxConnections = maxConnections;
 			if (maxConnections == MAX_CONNECTIONS_ELASTIC) {
 				acquireTimeout(Duration.ofMillis(ACQUIRE_TIMEOUT_NEVER_WAIT));
+				maxPendingAcquire(MAX_PENDING_ACQUIRE);
 			}
+			return this;
+		}
+
+		/**
+		 * Set the options to use for configuring {@link ConnectionProvider} the maximum number of registered
+		 * requests for acquire to keep in a pending queue
+		 * When invoked with MAX_PENDING_ACQUIRE the pending queue will not have upper limit.
+		 * Default to MAX_PENDING_ACQUIRE.
+		 *
+		 * @param maxPendingAcquire the maximum number of registered requests for acquire to keep
+		 * in a pending queue
+		 * @return {@literal this}
+		 * @throws IllegalArgumentException if maxPendingAcquire is negative
+		 */
+		public final Builder maxPendingAcquire(int maxPendingAcquire) {
+			if (maxPendingAcquire != MAX_PENDING_ACQUIRE && maxPendingAcquire <= 0) {
+				throw new IllegalArgumentException("Max pending acquire value must be strictly positive");
+			}
+			this.maxPendingAcquire = maxPendingAcquire;
 			return this;
 		}
 
@@ -367,6 +388,7 @@ public interface ConnectionProvider extends Disposable {
 			}
 			Builder builder = (Builder) o;
 			return maxConnections == builder.maxConnections &&
+			        maxPendingAcquire == builder.maxPendingAcquire &&
 			        name.equals(builder.name) &&
 			        acquireTimeout.equals(builder.acquireTimeout) &&
 			        Objects.equals(maxIdleTime, builder.maxIdleTime) &&
@@ -375,7 +397,7 @@ public interface ConnectionProvider extends Disposable {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(name, acquireTimeout, maxConnections, maxIdleTime, maxLifeTime);
+			return Objects.hash(name, acquireTimeout, maxConnections, maxPendingAcquire, maxIdleTime, maxLifeTime);
 		}
 	}
 }
